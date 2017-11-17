@@ -7,3 +7,4 @@ Coming Soon™:
 - Monster database to choose from.
 - Tabs to have both a Team A and Team B, possibly also a team C
 - Custom combo menu, not an ugly table
+- Android/iOS app MegaSoon™
