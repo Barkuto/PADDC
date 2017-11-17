@@ -30,11 +30,11 @@ import java.util.*
 private val tbMargin = 2.5
 private val lrMargin = 2.5
 private val barTitle = "PAD Damage Calculator"
-private val version = Properties().load(Main::class.java.getResourceAsStream("project.properties"))
 
 class Main : App(MainView::class)
 
 class MainView : View(barTitle) {
+    private var version: String by singleAssign()
     private val leader = MonsterView("Leader", this)
     private val sub1 = MonsterView("Sub 1", this)
     private val sub2 = MonsterView("Sub 2", this)
@@ -419,6 +419,9 @@ class MainView : View(barTitle) {
 
     init {
         with(root) {
+            val properties = Properties()
+            properties.load(Main::class.java.getResourceAsStream("/project.properties"))
+            version = properties.getProperty("version")
             setOnKeyPressed {
                 if (it.isControlDown && it.code == KeyCode.S) {
                     when {
