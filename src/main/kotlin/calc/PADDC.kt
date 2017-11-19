@@ -86,8 +86,7 @@ private fun calcMonsterDamage(monster: Monster, combos: Array<Combo>, teamAwaken
     val mainAtk = if (coop) monster.buffedCoopAtk() else monster.buffedAtk()
     val subAtk = if (coop) monster.buffedSubCoopAtk() else monster.buffedSubAtk()
     val mainAttDmg = calcAttDamage(mainAtk, monster.mainAtt, monster.awakenings, combos, teamAwakenings, burst)
-    var subAttDmg = calcAttDamage(subAtk, monster.subAtt, monster.awakenings, combos, teamAwakenings, burst)
-    subAttDmg = ((if (monster.mainAtt == monster.subAtt) (1.0 / 10.0) else (1.0 / 3.0)) * subAttDmg).toLong()
+    val subAttDmg = calcAttDamage(subAtk, monster.subAtt, monster.awakenings, combos, teamAwakenings, burst)
     return Pair(mainAttDmg, subAttDmg)
 }
 

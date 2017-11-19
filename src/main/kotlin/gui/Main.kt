@@ -511,7 +511,7 @@ class MonsterView(private val teamSlot: String,
                 Awakening.DARKOE -> darkOEs.set(darkOEs.get() + 1)
 
                 Awakening.TPA -> numTPA.set(numTPA.get() + 1)
-                Awakening.COOP -> num7c.set(num7c.get() + 1)
+                Awakening.COOP -> numCoop.set(numCoop.get() + 1)
                 Awakening.ATK -> numATK.set(numATK.get() + 1)
                 Awakening.SEVENC -> num7c.set(num7c.get() + 1)
 

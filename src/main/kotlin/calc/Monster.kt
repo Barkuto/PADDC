@@ -22,7 +22,7 @@ class Monster(var name: String = "",
         return attack + enhancedATKGain + plussesGain + atkLGain + atkPLGain + assistGain
     }
 
-    fun buffedCoopAtk() = if (awakenings.contains(Awakening.COOP)) Math.ceil(buffedAtk() * (Math.pow(1.5, awakenings.count { it == Awakening.COOP }.toDouble()))).toLong() else buffedAtk()
+    fun buffedCoopAtk() = if (awakenings.contains(Awakening.COOP)) Math.ceil(buffedAtk() * coopBonus()).toLong() else buffedAtk()
 
     fun subAtk() = Math.ceil((if (mainAtt == subAtt) (1.0 / 10.0) else (1.0 / 3.0)) * attack).toLong()
 
@@ -30,8 +30,10 @@ class Monster(var name: String = "",
 
     fun buffedSubCoopAtk() =
             if (awakenings.contains(Awakening.COOP))
-                Math.ceil((if (mainAtt == subAtt) (1.0 / 10.0) else (1.0 / 3.0)) * buffedAtk() * (Math.pow(1.5, awakenings.count { it == Awakening.COOP }.toDouble()))).toLong()
-            else buffedAtk()
+                Math.ceil((if (mainAtt == subAtt) (1.0 / 10.0) else (3.0 / 10.0)) * buffedAtk() * coopBonus()).toLong()
+            else buffedSubAtk()
+
+    private fun coopBonus() = Math.pow(1.5, awakenings.count { it == Awakening.COOP }.toDouble())
 
     override fun toString(): String {
         var str = "$name ${buffedAtk()} "
