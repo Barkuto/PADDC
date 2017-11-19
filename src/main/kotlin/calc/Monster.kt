@@ -33,7 +33,7 @@ class Monster(var name: String = "",
                 Math.ceil(subMulti() * buffedAtk() * coopBonus()).toLong()
             else buffedSubAtk()
 
-    private fun subMulti() = (if (mainAtt == subAtt) (1.0 / 10.0) else (3.0 / 10.0))
+    private fun subMulti() = (if (mainAtt == subAtt) (1.0 / 10.0) else (1.0 / 3.0))
     private fun coopBonus() = Math.pow(1.5, awakenings.count { it == Awakening.COOP }.toDouble())
 
     override fun toString(): String {
