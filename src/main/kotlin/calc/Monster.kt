@@ -24,15 +24,16 @@ class Monster(var name: String = "",
 
     fun buffedCoopAtk() = if (awakenings.contains(Awakening.COOP)) Math.ceil(buffedAtk() * coopBonus()).toLong() else buffedAtk()
 
-    fun subAtk() = Math.ceil((if (mainAtt == subAtt) (1.0 / 10.0) else (1.0 / 3.0)) * attack).toLong()
+    fun subAtk() = Math.ceil(subMulti() * attack).toLong()
 
-    fun buffedSubAtk() = Math.ceil((if (mainAtt == subAtt) (1.0 / 10.0) else (1.0 / 3.0)) * buffedAtk()).toLong()
+    fun buffedSubAtk() = Math.ceil(subMulti() * buffedAtk()).toLong()
 
     fun buffedSubCoopAtk() =
             if (awakenings.contains(Awakening.COOP))
-                Math.ceil((if (mainAtt == subAtt) (1.0 / 10.0) else (3.0 / 10.0)) * buffedAtk() * coopBonus()).toLong()
+                Math.ceil(subMulti() * buffedAtk() * coopBonus()).toLong()
             else buffedSubAtk()
 
+    private fun subMulti() = (if (mainAtt == subAtt) (1.0 / 10.0) else (3.0 / 10.0))
     private fun coopBonus() = Math.pow(1.5, awakenings.count { it == Awakening.COOP }.toDouble())
 
     override fun toString(): String {
