@@ -261,16 +261,15 @@ class MainView : View(barTitle) {
 
                 if (combosJSON != null) {
                     val cmbs = combosJSON as JsonArray<*>
-                    val list = mutableListOf<Combo>()
-                    for (c in cmbs) {
-                        val jobj = c as JsonObject
-                        val comb = Combo(
-                                jobj["num"].toString().toInt(),
-                                Attribute.fromString(jobj["att"].toString()),
-                                jobj["oe"].toString().toInt(),
-                                ComboType.fromString(jobj["type"].toString()))
-                        list.add(comb)
-                    }
+                    val list = cmbs
+                            .map { it as JsonObject }
+                            .map {
+                                Combo(
+                                        it["num"].toString().toInt(),
+                                        Attribute.fromString(it["att"].toString()),
+                                        it["oe"].toString().toInt(),
+                                        ComboType.fromString(it["type"].toString()))
+                            }
                     combos.setCombos(list.toTypedArray())
                     combosFile = true
                 }
@@ -297,6 +296,7 @@ class MainView : View(barTitle) {
                     resetAllFiles()
                     currEnemyFile = file
                 }
+                updateDamage()
                 title = "$barTitle: ${file.absolutePath}"
             } catch (re: RuntimeException) {
                 re.printStackTrace()
@@ -453,7 +453,7 @@ class MonsterView(private val teamSlot: String,
     private var atkPLatents = SimpleIntegerProperty()
     private var assistName = SimpleStringProperty("")
     private var assistAtt = SimpleObjectProperty<Attribute>()
-    private var assistAtk = SimpleIntegerProperty()
+    private var assistAtk = SimpleLongProperty()
     private var assistPlusses = SimpleIntegerProperty()
 
     private var fireRows = SimpleIntegerProperty()
@@ -492,6 +492,7 @@ class MonsterView(private val teamSlot: String,
         atkLatents.set(monster.atkLatents)
         atkPLatents.set(monster.atkPLatents)
         assistName.set(monster.assist.name)
+        assistAtk.set(monster.assist.attack)
         assistAtt.set(monster.assist.mainAtt)
         assistPlusses.set(monster.assist.plusses)
 
@@ -514,8 +515,9 @@ class MonsterView(private val teamSlot: String,
                 Awakening.ATK -> numATK.set(numATK.get() + 1)
                 Awakening.SEVENC -> num7c.set(num7c.get() + 1)
 
+                Awakening.VOIDPEN -> numVoidPen.set(numVoidPen.get() + 1)
+
                 else -> {
-                    println("else")
                 }
             }
         }
@@ -546,7 +548,7 @@ class MonsterView(private val teamSlot: String,
 
     fun name() = name
     fun monster() = Monster(name.get(), mainAtt.get(), subAtt.get(), atk.get(), plusses.get(), getAwakenings(),
-            AssistMonster(assistName.get(), assistAtt.get(), assistAtk.get().toLong(), assistPlusses.get()))
+            AssistMonster(assistName.get(), assistAtt.get(), assistAtk.get(), assistPlusses.get()))
 
     fun reset() {
         name.set("")
@@ -666,13 +668,17 @@ class MonsterView(private val teamSlot: String,
             }
             this += assistDropdown
         }
-        val assistFields = arrayOf(assistAtk, assistPlusses)
-        val assistImages = arrayOf("atkText.png", "Plus.png")
-        for (i in 0 until assistFields.size) {
-            row {
-                this += styledImage(resources.image("/${assistImages[i]}"))
-                this += styledFieldField(assistFields[i])
-            }
+
+        // Assist Attack
+        row {
+            this += styledImage(resources.image("/atkText.png"))
+            this += styledFieldField(assistAtk)
+        }
+
+        // Assist Plusses
+        row {
+            this += styledImage(resources.image("/Plus.png"))
+            this += styledFieldField(assistPlusses)
         }
 
         val atts = Attribute.values().filter { it != Attribute.NONE }
@@ -852,10 +858,7 @@ class CombosTableView(private val parentView: MainView) : View() {
         }
     }
 
-
-    fun combosJSON(): JsonObject {
-        return json { obj("combos" to array(combos.map { it.toJSON() })) }
-    }
+    fun combosJSON() = json { obj("combos" to array(combos.map { it.toJSON() })) }
 
     override val root = vbox {
         hbox {
@@ -1319,6 +1322,10 @@ class MenuBarView(private val parentView: MainView) : View() {
             item("Help™") { action {} }.isDisable = true
         }
     }
+}
+
+class TeamStatsView : View() {
+    override val root = vbox {}
 }
 
 private fun styledTitleLabel(s: String) =
