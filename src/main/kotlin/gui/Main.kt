@@ -18,9 +18,12 @@ import javafx.scene.control.TextField
 import javafx.scene.image.Image
 import javafx.scene.image.ImageView
 import javafx.scene.input.KeyCode
+import javafx.scene.input.KeyCombination
 import javafx.scene.paint.Color
 import javafx.scene.text.FontWeight
 import javafx.stage.FileChooser
+import javafx.stage.Modality
+import javafx.stage.StageStyle
 import tornadofx.*
 import java.io.File
 import java.text.DecimalFormat
@@ -139,6 +142,24 @@ class MainView : View(barTitle) {
             resetAllFiles()
         }
     }
+
+    fun saveCurrent() =
+            when {
+                currAllFile != null -> saveAll()
+                currTeamFile != null -> saveTeam()
+                currComboFile != null -> saveCombos()
+                currEnemyFile != null -> saveEnemy()
+                else -> saveAllAs()
+            }
+
+    private fun saveCurrentAs() =
+            when {
+                currAllFile != null -> saveAllAs()
+                currTeamFile != null -> saveTeamAs()
+                currComboFile != null -> saveCombosAs()
+                currEnemyFile != null -> saveEnemyAs()
+                else -> saveAllAs()
+            }
 
     fun saveTeam() = if (currTeamFile != null) currTeamFile!!.writeText(teamJSONString()) else saveTeamAs()
     fun saveCombos() = if (currComboFile != null) currComboFile!!.writeText(combosJSONString()) else saveCombosAs()
@@ -362,6 +383,12 @@ class MainView : View(barTitle) {
                                     vboxConstraints { useMaxWidth = true }
                                     action { mons.forEach { showMonsView(it) } }
                                 }
+                                this += label("")
+                                this += label("")
+                                button("I") {
+                                    vboxConstraints { useMaxWidth = true }
+                                    action { TeamStatsView(team(), coop.get()).openModal(stageStyle = StageStyle.UTILITY, modality = Modality.WINDOW_MODAL, resizable = false) }
+                                }
                             }
                         }
                     }
@@ -389,17 +416,6 @@ class MainView : View(barTitle) {
                                     checkbox { bind(coop) }
                                 }
                                 this += combos
-/*                                button("CALCULATE") {
-                                    minHeight = 50.0
-                                    vboxConstraints { useMaxWidth = true }
-                                    style {
-                                        fontSize = 30.px
-                                        baseColor = Color.GREEN
-                                    }
-
-                                    action { updateDamage() }
-                                }
-*/
                             }
 
                             vbox {
@@ -422,19 +438,7 @@ class MainView : View(barTitle) {
             val properties = Properties()
             properties.load(Main::class.java.getResourceAsStream("/project.properties"))
             version = properties.getProperty("version")
-            setOnKeyPressed {
-                if (it.isControlDown && it.code == KeyCode.S) {
-                    when {
-                        currAllFile != null -> saveAll()
-                        currTeamFile != null -> saveTeam()
-                        currComboFile != null -> saveCombos()
-                        currEnemyFile != null -> saveEnemy()
-                        else -> saveAllAs()
-                    }
-                }
-                if (it.isControlDown && it.code == KeyCode.O) readFile()
-                if (it.isControlDown && it.code == KeyCode.N) new()
-            }
+            setOnKeyPressed { if (it.isShortcutDown && it.isShiftDown && it.code == KeyCode.S) saveCurrentAs() }
         }
         primaryStage.minWidth = leader.root.minWidth * 10 + 20
         primaryStage.sizeToScene()
@@ -976,7 +980,7 @@ class DamageDoneMenuView(private val monsvs: List<MonsterView>,
     private val friendK = SimpleIntegerProperty()
     private val friendLK = SimpleIntegerProperty()
 
-    fun killers() = listOf(
+    private fun killers() = listOf(
             Pair(leaderK.get(), leaderLK.get()),
             Pair(sub1K.get(), sub1LK.get()),
             Pair(sub2K.get(), sub2LK.get()),
@@ -1295,8 +1299,12 @@ class KillerView(private val awokenKillers: SimpleIntegerProperty,
 
 class MenuBarView(private val parentView: MainView) : View() {
     override val root = menubar {
+        //        menu(graphic = styledImage(resources.image("/Save.png"))) { action { parentView.readFile() } }
+        //        menu(graphic = styledImage(resources.image("/Open.png"))) { action { parentView.readFile() } }
         menu("File") {
-            item("New") { action { parentView.new() } }
+            item("New", keyCombination = KeyCombination.keyCombination("Shortcut+N")) { action { parentView.new() } }
+            item("Open...", keyCombination = KeyCombination.keyCombination("Shortcut+O")) { action { parentView.readFile() } }
+            item("Save", keyCombination = KeyCombination.keyCombination("Shortcut+S")) { action { parentView.saveCurrent() } }
             separator()
             item("Save All") { action { parentView.saveAll() } }
             item("Save Team") { action { parentView.saveTeam() } }
@@ -1307,8 +1315,6 @@ class MenuBarView(private val parentView: MainView) : View() {
             item("Save Team As..") { action { parentView.saveTeamAs() } }
             item("Save Combos As..") { action { parentView.saveCombosAs() } }
             item("Save Enemy As..") { action { parentView.saveEnemyAs() } }
-            separator()
-            item("Open File") { action { parentView.readFile() } }
         }
         menu("Edit") {
             item("Reset Team") { action { parentView.resetTeam() } }
@@ -1324,8 +1330,126 @@ class MenuBarView(private val parentView: MainView) : View() {
     }
 }
 
-class TeamStatsView : View() {
-    override val root = vbox {}
+class TeamStatsView(private val team: Team,
+                    private val coop: Boolean) : View() {
+    override val root = vbox {
+        gridpane {
+            val multiplier = team.multiplier()
+            val monsters = team.monsters()
+            val awakenings = team.totalAwakenings()
+            row {
+                this += styledTitleLabel("Multiplier: $multiplier")
+                        .gridpaneConstraints {
+                            fillHeightWidth = true
+                            columnSpan = 10
+                        }
+            }
+            row {
+                vbox {
+                    this += styledTitleLabel("Name")
+                    this += styledTitleLabel("Buffed Atk")
+                }
+
+                monsters.forEach {
+                    vbox {
+                        this += styledTitleLabel(it.name)
+                        this += styledTitleLabel("${if (coop) it.buffedCoopAtk() else it.buffedAtk()}")
+                    }
+                }
+            }
+
+            row {
+                borderpane {
+                    useMaxWidth = true
+                    alignment = Pos.CENTER
+                    left = vbox {
+                        alignment = Pos.CENTER
+                        val pics = arrayOf(
+                                "FireRow.png",
+                                "WaterRow.png",
+                                "WoodRow.png",
+                                "LightRow.png",
+                                "DarkRow.png")
+                        val ords = arrayOf(
+                                Awakening.FIREROW.ordinal,
+                                Awakening.WATERROW.ordinal,
+                                Awakening.WOODROW.ordinal,
+                                Awakening.LIGHTROW.ordinal,
+                                Awakening.DARKROW.ordinal)
+
+                        (0 until pics.size)
+                                .filter { awakenings[ords[it]] > 0 }
+                                .forEach {
+                                    hbox {
+                                        alignment = Pos.CENTER
+                                        this += styledImage(resources.image("/${pics[it]}"))
+                                        this += styledTitleLabel("${awakenings[ords[it]]}")
+                                    }
+                                }
+                    }
+
+                    center = hbox {
+                        alignment = Pos.CENTER
+                        vbox {
+                            alignment = Pos.CENTER
+                            val pics = arrayOf(
+                                    "FireOE.png",
+                                    "WaterOE.png",
+                                    "WoodOE.png",
+                                    "LightOE.png",
+                                    "DarkOE.png")
+                            val ords = arrayOf(
+                                    Awakening.FIREOE.ordinal,
+                                    Awakening.WATEROE.ordinal,
+                                    Awakening.WOODOE.ordinal,
+                                    Awakening.LIGHTOE.ordinal,
+                                    Awakening.DARKOE.ordinal)
+
+                            (0 until pics.size)
+                                    .filter { awakenings[ords[it]] > 0 }
+                                    .forEach {
+                                        hbox {
+                                            alignment = Pos.CENTER
+                                            this += styledImage(resources.image("/${pics[it]}"))
+                                            this += styledTitleLabel("${awakenings[ords[it]]}")
+                                        }
+                                    }
+                        }
+                    }
+
+                    right = vbox {
+                        alignment = Pos.CENTER
+                        val pics = arrayOf(
+                                "ATK.png",
+                                "TPA.png",
+                                "CoopBoost.png",
+                                "7c.png",
+                                "VoidPen.png")
+                        val ords = arrayOf(
+                                Awakening.ATK.ordinal,
+                                Awakening.TPA.ordinal,
+                                Awakening.COOP.ordinal,
+                                Awakening.SEVENC.ordinal,
+                                Awakening.VOIDPEN.ordinal)
+
+                        (0 until pics.size)
+                                .filter { awakenings[ords[it]] > 0 }
+                                .forEach {
+                                    hbox {
+                                        alignment = Pos.CENTER
+                                        this += styledImage(resources.image("/${pics[it]}"))
+                                        this += styledTitleLabel("${awakenings[ords[it]]}")
+                                    }
+                                }
+                    }
+                }.gridpaneConstraints { columnSpan = 10 }
+            }
+        }.vboxConstraints {
+            marginLeftRight(10.0)
+            marginTop = 5.0
+            marginBottom = 10.0
+        }
+    }
 }
 
 private fun styledTitleLabel(s: String) =
