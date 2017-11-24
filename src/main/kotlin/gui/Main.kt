@@ -5,30 +5,42 @@ import com.beust.klaxon.JsonArray
 import com.beust.klaxon.JsonObject
 import com.beust.klaxon.Parser
 import com.beust.klaxon.json
+import javafx.application.Platform
 import javafx.beans.property.*
 import javafx.collections.FXCollections
 import javafx.collections.ObservableList
 import javafx.geometry.HPos
 import javafx.geometry.Pos
 import javafx.geometry.VPos
-import javafx.scene.control.ComboBox
-import javafx.scene.control.Label
-import javafx.scene.control.TableView
-import javafx.scene.control.TextField
+import javafx.scene.Parent
+import javafx.scene.control.*
 import javafx.scene.image.Image
 import javafx.scene.image.ImageView
 import javafx.scene.input.KeyCode
 import javafx.scene.input.KeyCombination
 import javafx.scene.paint.Color
 import javafx.scene.text.FontWeight
+import javafx.scene.text.TextAlignment
 import javafx.stage.FileChooser
 import javafx.stage.Modality
 import javafx.stage.StageStyle
+import org.h2.store.fs.FileUtils
+import padherder.DBMonster
+import padherder.PadHerder
 import tornadofx.*
+import java.awt.image.BufferedImage
 import java.io.File
+import java.io.FileNotFoundException
+import java.io.IOException
+import java.net.URL
+import java.net.URLConnection
+import java.nio.file.Files
+import java.nio.file.Paths
 import java.text.DecimalFormat
 import java.text.ParseException
 import java.util.*
+import javax.imageio.ImageIO
+import kotlin.concurrent.thread
 
 private val tbMargin = 2.5
 private val lrMargin = 2.5
@@ -43,7 +55,7 @@ class MainView : View(barTitle) {
     private val sub2 = MonsterView("Sub 2", this)
     private val sub3 = MonsterView("Sub 3", this)
     private val sub4 = MonsterView("Sub 4", this)
-    private val friend = MonsterView("Friend Leader", this)
+    private val friend = MonsterView("Friend", this)
     private val multi = MultiView(this)
 
     private val coop = SimpleBooleanProperty()
@@ -357,6 +369,15 @@ class MainView : View(barTitle) {
         enemy.updateHPLeft(dmgs.dmgTotals(), team())
     }
 
+    fun updateMonsterDB() {
+        PadHerder.update()
+        information("Monster Database has been updated.")
+    }
+
+    fun clearImageCache() {
+        confirm("Are you sure you want to clear the image cache?", actionFn = { ImageCacher.clearCache() })
+    }
+
     override val root =
             hbox {
                 minWidth = leader.root.minWidth * 6 + multi.root.minWidth
@@ -395,12 +416,12 @@ class MainView : View(barTitle) {
 
                     center {
                         hbox {
-                            this += leader.root
-                            this += sub1.root
-                            this += sub2.root
-                            this += sub3.root
-                            this += sub4.root
-                            this += friend.root
+                            this += leader
+                            this += sub1
+                            this += sub2
+                            this += sub3
+                            this += sub4
+                            this += friend
                         }
                     }
 
@@ -487,7 +508,18 @@ class MonsterView(private val teamSlot: String,
 
     fun setfromMonster(monster: Monster) {
         reset()
+        setfromMonsterNoAssist(monster)
+        setAssistFromMonster(monster.assist)
+    }
 
+    fun setfromMonsterNoAssist(monster: Monster) {
+        val assist = AssistMonster(
+                assistName.get(),
+                assistAtt.get(),
+                assistAtk.get(),
+                assistPlusses.get())
+
+        reset()
         name.set(monster.name)
         mainAtt.set(monster.mainAtt)
         subAtt.set(monster.subAtt)
@@ -495,10 +527,7 @@ class MonsterView(private val teamSlot: String,
         plusses.set(monster.plusses)
         atkLatents.set(monster.atkLatents)
         atkPLatents.set(monster.atkPLatents)
-        assistName.set(monster.assist.name)
-        assistAtk.set(monster.assist.attack)
-        assistAtt.set(monster.assist.mainAtt)
-        assistPlusses.set(monster.assist.plusses)
+        setAssistFromMonster(assist)
 
         monster.awakenings.forEach {
             when (it) {
@@ -525,6 +554,14 @@ class MonsterView(private val teamSlot: String,
                 }
             }
         }
+    }
+
+    fun setAssistFromMonster(assist: Monster) = setAssistFromMonster(assist.toAssist())
+    fun setAssistFromMonster(assist: AssistMonster) {
+        assistName.set(assist.name)
+        assistAtk.set(assist.attack)
+        assistAtt.set(assist.mainAtt)
+        assistPlusses.set(assist.plusses)
     }
 
     private fun getAwakenings(): Array<Awakening> {
@@ -597,11 +634,38 @@ class MonsterView(private val teamSlot: String,
         minWidth = 50.0
         prefWidth = 120.0
 
-        // Slot Name
-        row { add(styledTitleLabel(teamSlot)) }
+        // Slot Name and Choose Button
+        row {
+            button(teamSlot) {
+                useMaxWidth = true
+                gridpaneConstraints {
+                    fillWidth = true
+                    columnSpan = 2
+                }
+                action {
+                    val frag = SearchMonsterView(name.get())
+                    frag.openModal(stageStyle = StageStyle.UTILITY, modality = Modality.WINDOW_MODAL, resizable = true, block = true)
+                    try {
+                        setfromMonsterNoAssist(frag.chosen()!!.toMonster())
+                    } catch (e: NullPointerException) {
+                    }
+                }
+                style {
+                    fontWeight = FontWeight.BOLD
+                }
+            }
+        }
 
         // Monster Name
-        row { this += styled2ColFieldField(name) }
+        row {
+            this += styled2ColFieldField(name).also {
+                it.textProperty().addListener { _, old, new ->
+                    if (Math.abs(new.length - old.length) > 1) {
+                        it.selectEnd()
+                    }
+                }
+            }
+        }
 
         // Main and Sub Att Dropdowns
         val attlist = FXCollections.observableArrayList<Attribute>()
@@ -650,10 +714,37 @@ class MonsterView(private val teamSlot: String,
         }
 
         // Assist Stat Fields
-        row { this += styledTitleLabel("Assist") }
+        row {
+            button("Assist") {
+                useMaxWidth = true
+                gridpaneConstraints {
+                    fillWidth = true
+                    columnSpan = 2
+                }
+                action {
+                    val frag = SearchMonsterView(assistName.get())
+                    frag.openModal(stageStyle = StageStyle.UTILITY, modality = Modality.WINDOW_MODAL, resizable = true, block = true)
+                    try {
+                        setAssistFromMonster(frag.chosen()!!.toMonster())
+                    } catch (e: NullPointerException) {
+                    }
+                }
+                style {
+                    fontWeight = FontWeight.BOLD
+                }
+            }
+        }
 
         // Assist Name
-        row { this += styled2ColFieldField(assistName) }
+        row {
+            this += styled2ColFieldField(assistName).also {
+                it.textProperty().addListener { _, old, new ->
+                    if (Math.abs(new.length - old.length) > 1) {
+                        it.selectEnd()
+                    }
+                }
+            }
+        }
 
         // Assist Att Dropdown
         row {
@@ -1321,6 +1412,10 @@ class MenuBarView(private val parentView: MainView) : View() {
             item("Reset Combos") { action { parentView.resetCombos() } }
             item("Reset Enemy") { action { parentView.resetEnemy() } }
             item("Reset All") { action { parentView.resetAll() } }
+            separator()
+            item("Update Monsters") { action { parentView.updateMonsterDB() } }
+            item("Clear Image Cache") { action { parentView.clearImageCache() } }
+            separator()
             item("Preferences™") {}.isDisable = true
         }
         menu("?") {
@@ -1452,6 +1547,162 @@ class TeamStatsView(private val team: Team,
     }
 }
 
+class SearchMonsterView(private val name: String) : Fragment("Search") {
+    private val query = SimpleStringProperty()
+    private val results = mutableListOf<DBMonster>().observable()
+    private var chosen: DBMonster? = null
+    override val root = vbox {
+        textfield(query) {
+            alignment = Pos.CENTER
+            textProperty().addListener { _, _, new ->
+                try {
+                    val mons = PadHerder.get(new)
+                    results.clear()
+                    mons.forEach { results.add(it) }
+                } catch (e: FileNotFoundException) {
+                    alert(Alert.AlertType.ERROR, header = "No database file found!\nGo to \"Edit -> Update Monsters\"")
+                    close()
+                }
+            }
+        }
+        val table = listview(results) {
+            prefWidth = 315.0
+            cellFormat {
+                graphic = borderpane {
+                    left = vbox {
+                        alignment = Pos.CENTER
+                        label(it.id.toString())
+                        hbox {
+                            alignment = Pos.CENTER
+                            imageview(when (it.mainAtt) {
+                                Attribute.FIRE -> resources.image("/fire.png")
+                                Attribute.WATER -> resources.image("/water.png")
+                                Attribute.WOOD -> resources.image("/wood.png")
+                                Attribute.LIGHT -> resources.image("/light.png")
+                                Attribute.DARK -> resources.image("/dark.png")
+                                else -> resources.image("/blank.png")
+                            }) {
+                                fitWidth = image.width * 0.50
+                                fitHeight = image.height * 0.50
+                            }
+                            imageview(when (it.subAtt) {
+                                Attribute.FIRE -> resources.image("/fire.png")
+                                Attribute.WATER -> resources.image("/water.png")
+                                Attribute.WOOD -> resources.image("/wood.png")
+                                Attribute.LIGHT -> resources.image("/light.png")
+                                Attribute.DARK -> resources.image("/dark.png")
+                                else -> resources.image("/blank.png")
+                            }) {
+                                fitWidth = image.width * 0.50
+                                fitHeight = image.height * 0.50
+                            }
+                        }
+                    }
+
+                    center { label(it.name.replace(",", ",\n")).textAlignment = TextAlignment.CENTER }
+                }
+            }
+            onDoubleClick {
+                MonsterInfoView(selectedItem!!).openModal(stageStyle = StageStyle.UTILITY, modality = Modality.WINDOW_MODAL, resizable = false)
+            }
+        }
+        this += table
+        button("Choose Selected") {
+            useMaxWidth = true
+            action {
+                chosen = table.selectedItem
+                close()
+            }
+        }
+
+        query.set(name)
+    }
+
+    fun chosen() = chosen
+}
+
+private class MonsterInfoView(private val dbMonster: DBMonster) : View() {
+    override val root = gridpane {
+        label("${dbMonster.id}. ${dbMonster.name}") {
+            textAlignment = TextAlignment.CENTER
+            gridpaneConstraints {
+                columnSpan = 2
+                hAlignment = HPos.CENTER
+                columnRowIndex(0, 0)
+                fillWidth = true
+                marginTopBottom(10.0)
+                marginLeftRight(10.0)
+            }
+        }
+        imageview(ImageCacher.getImage(dbMonster)) {
+            gridpaneConstraints {
+                hAlignment = HPos.CENTER
+                columnRowIndex(0, 1)
+                columnSpan = 2
+                rowSpan = 2
+            }
+        }
+        imageview(when (dbMonster.mainAtt) {
+            Attribute.FIRE -> resources.image("/fire.png")
+            Attribute.WATER -> resources.image("/water.png")
+            Attribute.WOOD -> resources.image("/wood.png")
+            Attribute.LIGHT -> resources.image("/light.png")
+            Attribute.DARK -> resources.image("/dark.png")
+            else -> resources.image("/blank.png")
+        }) {
+            gridpaneConstraints {
+                hAlignment = HPos.LEFT
+                columnRowIndex(0, 3)
+            }
+        }
+        imageview(when (dbMonster.subAtt) {
+            Attribute.FIRE -> resources.image("/fire.png")
+            Attribute.WATER -> resources.image("/water.png")
+            Attribute.WOOD -> resources.image("/wood.png")
+            Attribute.LIGHT -> resources.image("/light.png")
+            Attribute.DARK -> resources.image("/dark.png")
+            else -> resources.image("/blank.png")
+        }) {
+            gridpaneConstraints {
+                hAlignment = HPos.RIGHT
+                columnRowIndex(1, 3)
+            }
+        }
+        borderpane {
+            center = hbox {
+                alignment = Pos.CENTER
+                dbMonster.awakenings.forEach {
+                    imageview(when (it) {
+                        Awakening.FIREROW -> resources.image("/FireRow.png")
+                        Awakening.WATERROW -> resources.image("/WaterRow.png")
+                        Awakening.WOODROW -> resources.image("/WoodRow.png")
+                        Awakening.LIGHTROW -> resources.image("/LightRow.png")
+                        Awakening.DARKROW -> resources.image("/DarkRow.png")
+
+                        Awakening.FIREOE -> resources.image("/FireOE.png")
+                        Awakening.WATEROE -> resources.image("/WaterOE.png")
+                        Awakening.WOODOE -> resources.image("/WoodOE.png")
+                        Awakening.LIGHTOE -> resources.image("/LightOE.png")
+                        Awakening.DARKOE -> resources.image("/DarkOE.png")
+
+                        Awakening.TPA -> resources.image("/TPA.png")
+                        Awakening.COOP -> resources.image("/CoopBoost.png")
+                        Awakening.SEVENC -> resources.image("/7c.png")
+                        Awakening.FUA -> resources.image("/FUA.png")
+                        Awakening.SFUA -> resources.image("/SFUA.png")
+                        Awakening.VOIDPEN -> resources.image("/VoidPen.png")
+                        Awakening.ATK -> resources.image("/ATK.png")
+                    })
+                }
+            }
+        }.gridpaneConstraints {
+            columnRowIndex(0, 4)
+            columnSpan = 2
+            fillHeightWidth = true
+        }
+    }
+}
+
 private fun styledTitleLabel(s: String) =
         Label(s).label(s) {
             alignment = Pos.CENTER
@@ -1553,3 +1804,32 @@ private fun styledImage(prop: SimpleObjectProperty<Image>) =
                 vAlignment = VPos.CENTER
             }
         }
+
+private class ImageCacher {
+    companion object {
+        private val cacheFolder = "./.cache/"
+
+        fun getImage(mons: DBMonster): Image {
+            val url = mons.image
+            val id = mons.id
+            File(cacheFolder).mkdirs()
+            val f = File(cacheFolder + id + ".png")
+            return if (f.exists()) {
+                Image(f.inputStream())
+            } else {
+                try {
+                    URL(url).openConnection()
+                            .also { it.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:31.0) Gecko/20100101 Firefox/31.0") }
+                            .also { it.connect() }
+                            .also { Files.copy(it.getInputStream(), f.toPath()) }
+                } catch (ioe: IOException) {
+                    ioe.printStackTrace()
+                }
+                Image(f.inputStream())
+            }
+        }
+
+        fun clearCache() = FileUtils.deleteRecursive(cacheFolder, true)
+
+    }
+}

@@ -36,9 +36,10 @@ class Monster(var name: String = "",
     private fun subMulti() = (if (mainAtt == subAtt) (1.0 / 10.0) else (1.0 / 3.0))
     private fun coopBonus() = Math.pow(1.5, awakenings.count { it == Awakening.COOP }.toDouble())
 
+    fun toAssist() = AssistMonster(name, mainAtt, attack.toLong(), plusses)
+
     override fun toString(): String {
-        var str = "$name ${buffedAtk()} "
-        return str
+        return name
     }
 
     fun toJSON(): JsonObject {
