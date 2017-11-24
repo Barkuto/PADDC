@@ -3,8 +3,9 @@ A Damage Calculator for the game Puzzle and Dragons
 
 Basically a glorified spreadsheet at this point.
 
+Now with monster loading from a database!
+
 Coming Soon™:
-- Monster database to choose from.
 - Tabs to have both a Team A and Team B, possibly also a team C
 - Custom combo menu, not an ugly table
 - NA Android/iOS app MegaSoon™
